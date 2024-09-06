@@ -9,6 +9,7 @@ interface Cell {
 export default class RubikCube extends THREE.Object3D {
   public cubeList: THREE.Object3D[] = [];
 
+  private initialPos: THREE.Vector3[] = [];
   private cellInfo: Cell[] = [];
 
   //cell_info
@@ -95,6 +96,8 @@ export default class RubikCube extends THREE.Object3D {
           }
 
           cube.position.set(x - 1, 1 - y, z - 1);
+          this.initialPos.push(cube.position.clone());
+
           this.add(cube);
 
           this.cubeList.push(cube);
@@ -106,8 +109,6 @@ export default class RubikCube extends THREE.Object3D {
         }
       }
     }
-
-    console.log(this.cellInfo);
   }
 
   private roundedPlaneGeometry(size: number, radius: number, depth: number) {
@@ -141,5 +142,16 @@ export default class RubikCube extends THREE.Object3D {
     });
 
     return geometry;
+  }
+
+  public checkWin() {
+    let succes = true;
+    this.cubeList.forEach((cube, index) => {
+      if (cube.position.distanceTo(this.initialPos[index]) > 0.1) {
+        succes = false;
+      }
+    });
+
+    return succes;
   }
 }

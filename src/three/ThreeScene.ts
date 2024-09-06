@@ -2,6 +2,7 @@ import * as THREE from "three";
 
 import RubikCube from "./RubikCube";
 import { OrbitControls } from "three/examples/jsm/Addons.js";
+import gsap from "gsap";
 
 export default class ThreeScene {
   //   scene: THREE.Scene;
@@ -14,13 +15,13 @@ export default class ThreeScene {
   private cube: RubikCube;
 
   private startSelectedCube: THREE.Intersection | undefined = undefined;
-  private startPoint = new THREE.Vector2();
   private scene: THREE.Scene;
 
   private rotatingCubes = new THREE.Group();
   private orbitControl: OrbitControls;
 
   private enableDrag = true;
+  private enableStart = false;
 
   //initialize three Scene
   constructor() {
@@ -107,6 +108,41 @@ export default class ThreeScene {
     document.addEventListener("pointerup", this.onPointerUp);
 
     this.render();
+
+    var tl = gsap.timeline({ repeat: -1 });
+
+    tl.to(this.cube.position, { y: 0.3, ease: "sine.inOut", duration: 2.0 });
+    tl.to(this.cube.position, { y: 0.0, ease: "sine.inOut", duration: 2.0 });
+    tl.play();
+  }
+
+  public async startGame() {
+    this.enableStart = false;
+    await this.randomCube();
+    this.enableStart = true;
+  }
+
+  async randomCube() {
+    const count = 1;
+    const dirlist = ["x", "y", "z", "-x", "-y", "-z"];
+
+    let dir = "x";
+    const angle = this.cube.rotation.y - Math.PI * 4;
+    gsap.to(this.cube.rotation, {
+      duration: 5.5,
+      y: angle,
+      ease: "sine.inOut",
+    });
+    for (let i = 0; i < count; i++) {
+      dir = dirlist[Math.floor(Math.random() * 6)];
+      const cube =
+        this.cube.cubeList[
+          Math.floor(Math.random() * this.cube.cubeList.length)
+        ];
+
+      this.findGroup(dir, cube);
+      await this.animateGroup(dir, 0.25);
+    }
   }
 
   render = () => {
@@ -130,7 +166,7 @@ export default class ThreeScene {
   };
 
   onPointerDown = (e: PointerEvent) => {
-    if (this.enableDrag == false) return;
+    if (this.enableDrag == false || this.enableStart == false) return;
 
     const pointer = new THREE.Vector2();
     pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
@@ -144,13 +180,12 @@ export default class ThreeScene {
     if (intersects[0] !== undefined) {
       // controls.enableRotate = false;
       this.startSelectedCube = intersects[0];
-      this.startPoint = pointer;
       this.orbitControl.enabled = false;
     }
   };
 
-  pointerMove = (e: PointerEvent) => {
-    if (this.enableDrag == false) return;
+  pointerMove = async (e: PointerEvent) => {
+    if (this.enableDrag == false || this.enableStart == false) return;
     if (this.startSelectedCube === undefined) return;
 
     const pointer = new THREE.Vector2();
@@ -189,7 +224,10 @@ export default class ThreeScene {
       this.findGroup(rotationDirection);
       this.startSelectedCube = undefined;
 
-      this.animateGroup(rotationDirection);
+      await this.animateGroup(rotationDirection);
+      if (this.cube.checkWin()) {
+        alert("Win!");
+      }
     }
   };
 
@@ -257,22 +295,22 @@ export default class ThreeScene {
     return rotationDirection;
   }
 
-  private findGroup(rotationDirection: string) {
-    if (this.startSelectedCube == undefined) return;
+  private findGroup(rotationDirection: string, startObj?: THREE.Object3D) {
+    const startcube = this.startSelectedCube?.object || startObj;
+    if (startcube == undefined) return;
 
-    const startcube = this.startSelectedCube;
     let group;
     if (rotationDirection === "y" || rotationDirection === "-y") {
       group = this.cube.cubeList.filter(
-        (x) => Math.abs(x.position.y - startcube.object.position.y) < 0.05
+        (x) => Math.abs(x.position.y - startcube.position.y) < 0.05
       );
     } else if (rotationDirection === "x" || rotationDirection === "-x") {
       group = this.cube.cubeList.filter(
-        (x) => Math.abs(x.position.x - startcube.object.position.x) < 0.05
+        (x) => Math.abs(x.position.x - startcube.position.x) < 0.05
       );
     } else if (rotationDirection === "z" || rotationDirection === "-z") {
       group = this.cube.cubeList.filter(
-        (x) => Math.abs(x.position.z - startcube.object.position.z) < 0.05
+        (x) => Math.abs(x.position.z - startcube.position.z) < 0.05
       );
     }
     this.rotatingCubes = new THREE.Group();
@@ -280,7 +318,7 @@ export default class ThreeScene {
     this.cube.add(this.rotatingCubes);
   }
 
-  animateGroup = (rotationDirection: string) => {
+  animateGroup = async (rotationDirection: string, duration = 0.5) => {
     this.enableDrag = false;
     let d = 0;
     let rotateAboutAxis: any;
@@ -311,21 +349,26 @@ export default class ThreeScene {
         (this.rotatingCubes.rotation.z = THREE.MathUtils.degToRad(-d));
       rotateAbsolute = () => (this.rotatingCubes.rotation.z = -Math.PI / 2);
     }
+    const target = {
+      d: 0,
+    };
 
-    let timer = setInterval(() => {
-      d += 3;
-      rotateAboutAxis(d);
-      if (d >= 90) {
+    await gsap.to(target, {
+      d: 90,
+      duration: duration,
+      ease: "power3.inOut",
+      onUpdate: () => {
+        rotateAboutAxis(target.d);
+      },
+      onComplete: () => {
         rotateAbsolute();
-        // this.render();
+
         if (this.rotatingCubes !== undefined) {
           this.enableDrag = true;
           this.ungroup();
         }
-
-        clearInterval(timer);
-      }
-    }, 10);
+      },
+    });
   };
 
   private ungroup() {
